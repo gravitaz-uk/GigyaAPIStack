@@ -1,5 +1,10 @@
+#*.js
+*.d.ts
 node_modules
+.npmignore
 
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+cdk.yaml*
+code.zip
