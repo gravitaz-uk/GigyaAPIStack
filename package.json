@@ -21,7 +21,9 @@
     "@aws-cdk/aws-lambda": "^1.8.0",
     "@aws-cdk/aws-ssm": "^1.8.0",
     "@aws-cdk/core": "^1.8.0",
+    "json-stringify-safe": "^5.0.1",
     "middy": "^0.29.0",
+    "morphism": "^1.12.1",
     "source-map-support": "^0.5.13",
     "unirest": "^0.6.0"
   }
