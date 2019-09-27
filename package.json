@@ -21,10 +21,14 @@
     "@aws-cdk/aws-lambda": "^1.8.0",
     "@aws-cdk/aws-ssm": "^1.8.0",
     "@aws-cdk/core": "^1.8.0",
+    "aws-xray-sdk": "^2.3.6",
     "json-stringify-safe": "^5.0.1",
+    "log": "^6.0.0",
+    "log-aws-lambda": "^5.0.0",
     "middy": "^0.29.0",
     "morphism": "^1.12.1",
     "source-map-support": "^0.5.13",
+    "truthy": "0.0.1",
     "unirest": "^0.6.0"
   }
 }

@@ -1,28 +1,47 @@
+/**
+    # Gigya Proxy handler
+    Provides an proxy layer between OIDC RP and Gigya endpoints. Features:
+    1. hides Gigya configuration from clients - API keys, client ID, client and partner secrets
+    2. Inserts an Authorisation header if not present formed from client id and secret
+    3. Supports AWS X-Ray (not tested)
+    4. Provides a mechanism for implementing additional security/services not supported by Gigya e.g.
+    4.1 PKCE
+    4.2 Dynamic Client registration
+
+    Config parameters are currently stored in SSM and accessed within lambda. An alternative is to handle these within CDK.
+ */
+
 const 
     crypto = require('crypto'),
     middy = require('middy'),
     stringify = require('json-stringify-safe'),
-    { ssm, httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } = require('middy/middlewares'),
+    truthy = require('truthy'),
+    AWSXRay = require('aws-xray-sdk');
+
+AWSXRay.captureHTTPsGlobal(require('http'));
+
+var log = console.log;
+
+const
     unirest = require('unirest'),
+    { ssm, httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } = require('middy/middlewares'),
     SSM_CONFIG = {
         cache: true,
         paths: {
-            CONFIG: '/dev/gigyapoc'
+            CONFIG: process.env.GIGYA_SSM_PATH || '/dev/gigyapoc'
         }
     };
 
 const gigyaHelperMiddleware = (config) => {
     return ({
         before: (handler, next) => {
-            console.log('gigyaHelperMiddleware.before');
             // insert a basic authorisation header if not supplied by caller
             if (handler && handler.event) {
-                console.log(JSON.stringify(handler.event));
+                log('event', JSON.stringify(handler.event));
                 if (handler.event.headers && !handler.event.headers.Authorization) {
                     handler.event.headers.Authorization = 
                         `Basic ${Buffer.from(process.env.CONFIG_CLIENT_ID + ":" + process.env.CONFIG_CLIENT_SECRET).toString('base64')}`;
                 }
-                console.log(stringify(handler.event.headers));
             }
             next();
         },
@@ -30,24 +49,21 @@ const gigyaHelperMiddleware = (config) => {
             if (handler && handler.response && handler.response.body && (handler.response.body instanceof Object)) {
                 handler.response.body = stringify(handler.response.body);
             };
-            console.log('gigyaHelperMiddleware.after');
-            console.log(stringify(handler.response));
             next();
         }
     })
 }
 
-let forwardAPICall = async (event, context, endpoint = 'token') => {
+let forwardAPICall = async (event, context, endpoint = '/token') => {
     let uri = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.CONFIG_API_KEY}${endpoint}`;
     delete event.headers.Host;
-    console.log('forwarding to ' + uri)
     let response = await unirest (
         event.httpMethod || 'POST', 
         uri,
         event.headers,
         event.body);
-    if (response.statusCode>200) {
-        response.body.gigyaStatusCode = response.statusCode;
+    if (truthy(process.env.EMBED_STATUS_CODE) && response.body && response.statusCode!=200 ) {
+        response.body.proxyStatusCode = response.statusCode;
         response.statusCode = 200
     }
     return { 
@@ -57,17 +73,7 @@ let forwardAPICall = async (event, context, endpoint = 'token') => {
 }
 
 let handlers = {
-    tokenHandler : async (event, context) => {
-        return forwardAPICall(event, context, '/token');
-    },
-    introspectHandler : async (event, context) => {
-        return forwardAPICall(event, context, '/introspect');
-    },
-    userinfoHandler : async (event, context) => {
-        return forwardAPICall(event, context, '/userinfo');
-    },
     sign : async function(event, context) {
-        console.log(process.env.CONFIG_PARTNER_SECRET)
         const hash = crypto.createHmac('sha1', Buffer.from(process.env.CONFIG_PARTNER_SECRET||"TIM", 'base64'));
         const consent_str = stringify(event.body.consent?event.body.consent:'default');
         const sig = hash.update(stringify(consent_str)).digest('base64').replace(/=$/g, '').replace(/\//g, '_').replace(/[+]/g, '-');
@@ -86,20 +92,36 @@ let handlers = {
             }
         };
     },
+    doRedirect: async (event, context) => {
+        const queryParams = event.queryStringParameters ? 
+            '?' + Object.keys(event.queryStringParameters).map(i=>`${i}=${event.queryStringParameters[i]}`).join('&') : "";
+        const gigyaAuthorize = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.CONFIG_API_KEY}/authorize${queryParams}`;
+        log ('Redirecting to ', JSON.stringify(gigyaAuthorize));
+        return {
+            statusCode: 302,
+            headers: { 'location': gigyaAuthorize}
+        }
+    },
     proxyHandler : async (event, context) => {
-        console.log('Switching on ' + event.path);
         switch (event.path) {
-            case '/sign': return handlers.sign(event, context);
+            case '/sign':       return handlers.sign(event, context);
             case '/showConfig': return handlers.showConfig(event, context);
-            default: return forwardAPICall(event, context, event.path); 
+            case '/authorize':  return handlers.doRedirect(event, context);
+            case '/token':
+            case '/userinfo':
+            case '/refresh':    return forwardAPICall(event, context, event.path); 
+            default:            return {
+                statusCode: 404,
+                body: {"err": `unknown endpoint ${event.path}`}
+            }; 
         }
     }
 }
-//inject config parameters into handlers, stored outside of CDK as they include secrets
+
 constMiddyHandlers = Object.entries(handlers).reduce((nh, h)=> {
     nh[h[0]]=
         middy(h[1])
-        .use(ssm(SSM_CONFIG))
+        .use(ssm(SSM_CONFIG))         //inject config parameters into handlers, stored outside of CDK as they include secrets  
         .use(httpHeaderNormalizer())
         .use(jsonBodyParser())
         .use(urlEncodeBodyParser())
