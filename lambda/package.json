@@ -1,0 +1,20 @@
+{
+  "name": "gigya-helper-lambda",
+  "version": "1.0.0",
+  "description": "helper code for Gigya OIDC",
+  "main": "handlers.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Tim Holmes",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.539.0",
+    "aws-xray-sdk": "^2.3.6",
+    "base64url": "^3.0.1",
+    "json-stringify-safe": "^5.0.1",
+    "middy": "^0.29.0",
+    "truthy": "0.0.1",
+    "unirest": "^0.6.0"
+  }
+}

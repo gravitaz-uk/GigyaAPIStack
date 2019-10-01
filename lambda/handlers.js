@@ -16,13 +16,10 @@ const
     middy = require('middy'),
     stringify = require('json-stringify-safe'),
     truthy = require('truthy'),
-    AWSXRay = require('aws-xray-sdk');
-
-AWSXRay.captureHTTPsGlobal(require('http'));
-
-var log = console.log;
-
-const
+    AWS = require('aws-sdk'),
+    ddb = new AWS.DynamoDB(),
+    { fromBase64 } = require('base64url');
+    AWSXRay = require('aws-xray-sdk'),
     unirest = require('unirest'),
     { ssm, httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } = require('middy/middlewares'),
     SSM_CONFIG = {
@@ -32,12 +29,18 @@ const
         }
     };
 
+AWSXRay.captureHTTPsGlobal(require('http'));
+
+var log = console.log;
+const TABLE_NAME = process.env.VERIFIER_TABLE_NAME;
+const db = new AWS.DynamoDB.DocumentClient();
+    
 const gigyaHelperMiddleware = (config) => {
     return ({
         before: (handler, next) => {
             // insert a basic authorisation header if not supplied by caller
             if (handler && handler.event) {
-                log('event', JSON.stringify(handler.event));
+                log('event', stringify(handler.event));
                 if (handler.event.headers && !handler.event.headers.Authorization) {
                     handler.event.headers.Authorization = 
                         `Basic ${Buffer.from(process.env.CONFIG_CLIENT_ID + ":" + process.env.CONFIG_CLIENT_SECRET).toString('base64')}`;
@@ -54,9 +57,94 @@ const gigyaHelperMiddleware = (config) => {
     })
 }
 
+let saveCodeRequest = async ({client_id, code_challenge, code_challenge_method, state}) => {
+    let d = (new Date()).toJSON();
+    let item = {
+        'state'                 : {'S': state},
+        'client_id'             : {'S': client_id},
+        'code_challenge'        : {'S': code_challenge},
+        'code_challenge_method' : {'S': code_challenge_method},
+        'timestamp'             : {'S': d}
+    };
+
+    let ddbArgs = {
+        'TableName': TABLE_NAME,
+        'Item': item
+    };
+
+    log('storing', stringify(ddbArgs));
+    try {
+        await ddb.putItem(ddbArgs).promise();
+    } catch (e) {
+        log('error writing to dd', stringify(e))
+    }       
+}
+
+let findItem = async(key) => {
+    let ddbArgs = {
+        'TableName': TABLE_NAME,
+        'Key': {
+            'code_challenge': {
+                S: key
+            }
+        }
+    };
+
+    let response=undefined;
+
+    log('search ddb for', stringify(ddbArgs));
+
+    try {
+        response = await ddb.getItem(ddbArgs).promise();
+    } catch (e) {
+        log('error reading from dd', stringify(e));
+        return false;
+    }
+    log('retrieved', key, stringify(response));
+
+    if (response && response.Item) {
+        let item = response.Item;
+        ddb.deleteItem(ddbArgs).promise().then(log(ddbArgs, 'deleted from ddb'));
+        if (item.code_challenge && (item.code_challenge.S==key)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// only gigya knows the code prior to this so our solution is a bit crap and not sufficient for production use
+let verifyCodeChallenge = async ({client_id, code_verifier, state}) => {
+    if (!code_verifier) {
+        return false;
+    }
+    // try plain then S256
+    
+    let found=await findItem(code_verifier);
+    if (!found) {
+        let originalChallenge = fromBase64(crypto.createHash('sha256').update(code_verifier).digest('base64'));
+        found = await findItem(originalChallenge);
+    }
+
+    return found;
+}
+
 let forwardAPICall = async (event, context, endpoint = '/token') => {
     let uri = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.CONFIG_API_KEY}${endpoint}`;
     delete event.headers.Host;
+    if (endpoint == '/token') {
+        let verified = await verifyCodeChallenge(event.body);
+        if (!verified) {
+            log('PKCE check failed');
+            return {
+                statusCode: 403,
+                body: {
+                    errMsg: 'PKCE verification failure'
+                }
+            }
+        }
+        log('PKCE check OK');
+    }
     let response = await unirest (
         event.httpMethod || 'POST', 
         uri,
@@ -92,11 +180,14 @@ let handlers = {
             }
         };
     },
-    doRedirect: async (event, context) => {
+    doAuthorize: async (event, context) => {
+        if (event.queryStringParameters.code_challenge) {
+            await saveCodeRequest(event.queryStringParameters)
+        }    
         const queryParams = event.queryStringParameters ? 
             '?' + Object.keys(event.queryStringParameters).map(i=>`${i}=${event.queryStringParameters[i]}`).join('&') : "";
         const gigyaAuthorize = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.CONFIG_API_KEY}/authorize${queryParams}`;
-        log ('Redirecting to ', JSON.stringify(gigyaAuthorize));
+        log ('Redirecting to ', stringify(gigyaAuthorize));
         return {
             statusCode: 302,
             headers: { 'location': gigyaAuthorize}
@@ -106,7 +197,7 @@ let handlers = {
         switch (event.path) {
             case '/sign':       return handlers.sign(event, context);
             case '/showConfig': return handlers.showConfig(event, context);
-            case '/authorize':  return handlers.doRedirect(event, context);
+            case '/authorize':  return handlers.doAuthorize(event, context);
             case '/token':
             case '/userinfo':
             case '/refresh':    return forwardAPICall(event, context, event.path); 
