@@ -5,8 +5,8 @@
     2. Inserts an Authorisation header if not present formed from client id and secret
     3. Supports AWS X-Ray (not tested)
     4. Provides a mechanism for implementing additional security/services not supported by Gigya e.g.
-    4.1 PKCE
-    4.2 Dynamic Client registration
+    4.1 PKCE (sort of)
+    4.2 Dynamic Client registration (not yet)
 
     Config parameters are currently stored in SSM and accessed within lambda. An alternative is to handle these within CDK.
  */
@@ -129,10 +129,10 @@ let verifyCodeChallenge = async ({client_id, code_verifier, state}) => {
     return found;
 }
 
-let forwardAPICall = async (event, context, endpoint = '/token') => {
+let forwardToGigya = async (event, context, endpoint = '/token') => {
     let uri = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.CONFIG_API_KEY}${endpoint}`;
     delete event.headers.Host;
-    if (endpoint == '/token') {
+    if (endpoint == '/token' && event && event.body && event.body.response_type=='code') {
         let verified = await verifyCodeChallenge(event.body);
         if (!verified) {
             log('PKCE check failed');
@@ -180,7 +180,7 @@ let handlers = {
             }
         };
     },
-    doAuthorize: async (event, context) => {
+    redirectToGigya: async (event, context) => {
         if (event.queryStringParameters.code_challenge) {
             await saveCodeRequest(event.queryStringParameters)
         }    
@@ -197,15 +197,18 @@ let handlers = {
         switch (event.path) {
             case '/sign':       return handlers.sign(event, context);
             case '/showConfig': return handlers.showConfig(event, context);
-            case '/authorize':  return handlers.doAuthorize(event, context);
+            case '/authorize':  return handlers.redirectToGigya(event, context);
             case '/token':
             case '/userinfo':
-            case '/refresh':    return forwardAPICall(event, context, event.path); 
+            case '/refresh':    return forwardToGigya(event, context, event.path); 
             default:            return {
                 statusCode: 404,
                 body: {"err": `unknown endpoint ${event.path}`}
             }; 
         }
+    },
+    awsAssertion : async (event, context) => {
+        let id_token = handler.event.headers.Authorization;
     }
 }
 
