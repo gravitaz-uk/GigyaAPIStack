@@ -1,6 +1,6 @@
 # Gigya API Proxy
 Provides an proxy layer between OIDC RP and Gigya endpoints. Features:
-1. hides Gigya configuration from clients - API keys, client ID, client and partner secrets
+1. Hides Gigya configuration from clients - API keys, client ID, client and partner secrets
 2. Inserts a configurable Authorisation header if not present formed from Gigya client id and secret
 3. Might supports AWS X-Ray (not tested)
 4. Provides a mechanism for implementing additional security/services not supported by Gigya e.g.

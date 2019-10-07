@@ -21,13 +21,7 @@ const
     { fromBase64 } = require('base64url');
     AWSXRay = require('aws-xray-sdk'),
     unirest = require('unirest'),
-    { ssm, httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } = require('middy/middlewares'),
-    SSM_CONFIG = {
-        cache: true,
-        paths: {
-            CONFIG: process.env.GIGYA_SSM_PATH || '/dev/gigyapoc'
-        }
-    };
+    { httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } = require('middy/middlewares');
 
 AWSXRay.captureHTTPsGlobal(require('http'));
 
@@ -208,14 +202,14 @@ let handlers = {
         }
     },
     awsAssertion : async (event, context) => {
-        let id_token = handler.event.headers.Authorization;
+        let id_token = handler.event.body.id_token;
+        
     }
 }
 
 constMiddyHandlers = Object.entries(handlers).reduce((nh, h)=> {
     nh[h[0]]=
         middy(h[1])
-        .use(ssm(SSM_CONFIG))         //inject config parameters into handlers, stored outside of CDK as they include secrets  
         .use(httpHeaderNormalizer())
         .use(jsonBodyParser())
         .use(urlEncodeBodyParser())
