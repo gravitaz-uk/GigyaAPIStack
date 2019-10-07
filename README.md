@@ -20,9 +20,6 @@ Details [here](https://confluence.nap/pages/viewpage.action?pageId=288113277)
 
 Before deploying package up Javascript code using zip -fr code.zip lambda
 
-Configuration - create parameters in AWS System Manager Parameter Store:
+Configuration - 
 
-/dev/gigyapoc/api_key - API Key of Gigya Site
-/dev/gigyapoc/client_id - Client ID of RP
-/dev/gigyapoc/client_secret - Client Secret of RP
-/dev/gigyapoc/partner_secret - Partner Secret from Gigya tenant. Only required for Signature endpoint
+Parameters for Gigya API_KEY, client id and client secret are now part of the CDK stack using Cdk.Parameter constructs
