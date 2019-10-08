@@ -1,3 +1,11 @@
 {
-  "app": "npx ts-node bin/cdk-gigya-helper.ts"
+  "app": "npx ts-node bin/cdk-gigya-helper.ts",
+  "context": {
+    "API_DOMAIN_NAME" : "api.gravitaz.co.uk",
+    "CERT_URN" : "arn:aws:acm:eu-west-2:384538104517:certificate/c0e83125-6b75-4c80-b146-18e7d09c7bb8",
+    "API_ENDPOINT_NAME" : "GigyaProxyEndpoint",
+    "GIGYA_API_KEY" : "3_1P2DV2VJMA_9HuJ7UWPR-IpsC6aCAio3knEz0tloRrmggSIX3wLzRCcl_oTXpcPb",
+    "GIGYA_CLIENT_ID" : "txLT1xNyH_4XccoeWYcTGyc8",
+    "GIGYA_CLIENT_SECRET" : "XvdLrm6t_3q5L1_oea4YXVS5wcSEHBNxXpMeNBDxATzy2bX4JeB9JVYrU4T7W3_pgkF1FVcaOmscoM_-MLEC-Q"
+  }
 }

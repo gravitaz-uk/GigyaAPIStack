@@ -11,39 +11,15 @@ export class CdkGigyaHelperStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
     
-    const     
-      DOMAIN_NAME     = new cdk.CfnParameter(this, 'API_DOMAINNAME', { 
-        type: 'String',
-        description: 'domain name to use for API endpoint',
-        default: "api.gravitaz.co.uk"
-      }),
-      CERTIFICATE_URN = new cdk.CfnParameter(this, 'CERT_URN', { 
-        type: 'String',
-        description: 'URN of SSL certificate to use with API endpoint',
-        default: "arn:aws:acm:eu-west-2:384538104517:certificate/c0e83125-6b75-4c80-b146-18e7d09c7bb8"
-      }),
-      API_ENDPOINT_NAME = new cdk.CfnParameter(this, 'API_ENDPOINT_NAME', { 
-        type: 'String',
-        description: 'Name of API endpoint to use within the stack',
-        default: "GigyaProxyEndpoint"
-      }),
-      GIGYA_API_KEY = new cdk.CfnParameter(this, 'GIGYA_API_KEY', {
-          type: 'String',
-          description: 'API KEY within Gigya',
-          default: '3_1P2DV2VJMA_9HuJ7UWPR-IpsC6aCAio3knEz0tloRrmggSIX3wLzRCcl_oTXpcPb'
-      }),
-      GIGYA_CLIENT_ID = new cdk.CfnParameter(this, 'GIGYA_CLIENT_ID', {
-        type: 'String',
-        description: 'Client ID within Gigya',
-        default: 'txLT1xNyH_4XccoeWYcTGyc8'
-      }),
-      GIGYA_CLIENT_SECRET = new cdk.CfnParameter(this, 'GIGYA_CLIENT_SECRET', {
-        type: 'String',
-        description: 'Client Secret within Gigya',
-        default: 'XvdLrm6t_3q5L1_oea4YXVS5wcSEHBNxXpMeNBDxATzy2bX4JeB9JVYrU4T7W3_pgkF1FVcaOmscoM_-MLEC-Q',
-        noEcho: true
-      });
-
+    // Context variables (override with -c on command line, defaults in cdk.json
+    const
+      DOMAIN_NAME         = this.node.tryGetContext('API_DOMAIN_NAME'),
+      CERTIFICATE_URN     = this.node.tryGetContext('CERT_URN'),
+      API_ENDPOINT_NAME   = this.node.tryGetContext('API_ENDPOINT_NAME') || "GigyaProxyEndpoint",
+      GIGYA_API_KEY       = this.node.tryGetContext('GIGYA_API_KEY'),
+      GIGYA_CLIENT_ID     = this.node.tryGetContext('GIGYA_CLIENT_ID'),
+      GIGYA_CLIENT_SECRET = this.node.tryGetContext('GIGYA_CLIENT_SECRET');
+    
       // create a bespoke role for our stack for lambda execution
     const lambdaExecutionRole = new Role(this, 'GigyaLambdaExecutionRole', {
       roleName: 'GigyaLambdaExecutionRole',
@@ -98,11 +74,10 @@ export class CdkGigyaHelperStack extends cdk.Stack {
       description: 'Proxy function for Gigya OIDC endpoints',
       environment: {
         'EMBED_STATUS_CODE': 'true', // do not relay actual Gigya status codes as this will prevent actual error from reaching client
-        'GIGYA_SSM_PATH': '/dev/gigyapoc', // tell lambda code where to find Gigya config secrets
         'VERIFIER_TABLE_NAME': verifierTableName, // where we will store code verifiers between authorize and token calls
-        'CONFIG_API_KEY': GIGYA_API_KEY.valueAsString,
-        'CONFIG_CLIENT_ID': GIGYA_CLIENT_ID.valueAsString,
-        'CONFIG_CLIENT_SECRET': GIGYA_CLIENT_SECRET.valueAsString,
+        'CONFIG_API_KEY': GIGYA_API_KEY,
+        'CONFIG_CLIENT_ID': GIGYA_CLIENT_ID,
+        'CONFIG_CLIENT_SECRET': GIGYA_CLIENT_SECRET,
       }
     });
 
@@ -111,17 +86,17 @@ export class CdkGigyaHelperStack extends cdk.Stack {
 
     // reference to previously provisioned certificate '*.gravitaz.co.uk' - a domain that I own. 
     // need to create CNAME for 'api' subdomain.
-    const domainCertificate = Certificate.fromCertificateArn(this, 'SSLCertificate', CERTIFICATE_URN.valueAsString);
+    const domainCertificate = Certificate.fromCertificateArn(this, 'SSLCertificate', CERTIFICATE_URN);
     
     // define API endpoint
     const api = new apigw.LambdaRestApi(this, 'ProxyEndpoint', {
-      restApiName: API_ENDPOINT_NAME.valueAsString,
+      restApiName: API_ENDPOINT_NAME,
       endpointTypes: [ EndpointType.REGIONAL ],
       handler: proxy,
       description: 'Provides a proxy layer on top of Gigya endpoints to support OIDC',
       domainName: {
         certificate: domainCertificate,
-        domainName: DOMAIN_NAME.valueAsString
+        domainName: DOMAIN_NAME
       }
     });
 

@@ -33,12 +33,13 @@ const gigyaHelperMiddleware = (config) => {
     return ({
         before: (handler, next) => {
             // insert a basic authorisation header if not supplied by caller
-            if (handler && handler.event) {
-                log('event', stringify(handler.event));
-                if (handler.event.headers && !handler.event.headers.Authorization) {
-                    handler.event.headers.Authorization = 
-                        `Basic ${Buffer.from(process.env.CONFIG_CLIENT_ID + ":" + process.env.CONFIG_CLIENT_SECRET).toString('base64')}`;
-                }
+            if (!handler || !handler.event) {
+                next();
+            }
+            log('event', stringify(handler.event));
+            if (handler.event.headers && !handler.event.headers.Authorization) {
+                handler.event.headers.Authorization = 
+                    `Basic ${Buffer.from(process.env.CONFIG_CLIENT_ID + ":" + process.env.CONFIG_CLIENT_SECRET).toString('base64')}`;
             }
             next();
         },
@@ -96,15 +97,14 @@ let findItem = async(key) => {
     }
     log('retrieved', key, stringify(response));
 
-    if (response && response.Item) {
-        let item = response.Item;
-        ddb.deleteItem(ddbArgs).promise().then(log(ddbArgs, 'deleted from ddb'));
-        if (item.code_challenge && (item.code_challenge.S==key)) {
-            return true;
-        }
+    if (!response || !response.Item) {
+        return false;
     }
 
-    return false;
+    let item = response.Item;
+    ddb.deleteItem(ddbArgs).promise().then(log(ddbArgs, 'deleted from ddb'));
+    return (item.code_challenge && (item.code_challenge.S==key));
+
 }
 
 // only gigya knows the code prior to this so our solution is a bit crap and not sufficient for production use
