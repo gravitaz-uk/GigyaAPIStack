@@ -13,6 +13,9 @@
     "aws-xray-sdk": "^2.3.6",
     "base64url": "^3.0.1",
     "json-stringify-safe": "^5.0.1",
+    "jsonwebtoken": "^8.5.1",
+    "jwks-rsa": "^1.6.0",
+    "jwt-decode": "^2.2.0",
     "middy": "^0.29.0",
     "truthy": "0.0.1",
     "unirest": "^0.6.0"

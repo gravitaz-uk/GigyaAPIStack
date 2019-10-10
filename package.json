@@ -23,6 +23,7 @@
     "@aws-cdk/aws-ssm": "^1.11.0",
     "@aws-cdk/core": "^1.11.0",
     "@aws-cdk/cx-api": "^1.11.0",
-    "@aws-cdk/region-info": "^1.11.0"
+    "@aws-cdk/region-info": "^1.11.0",
+    "jsonwebtoken": "^8.5.1"
   }
 }

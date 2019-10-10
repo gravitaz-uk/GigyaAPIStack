@@ -6,6 +6,7 @@ Provides an proxy layer between OIDC RP and Gigya endpoints. Features:
 4. Provides a mechanism for implementing additional security/services not supported by Gigya e.g.
 4.1 PKCE - implemented
 4.2 Dynamic Client registration - not implemented
+4.3 ID token decode with optional verification against Gigya public key - implemented
 
 ## Implementation
 Implemented using [AWS CDK](https://docs.aws.amazon.com/cdk/) 
@@ -18,8 +19,6 @@ Details [here](https://confluence.nap/pages/viewpage.action?pageId=288113277)
  * `cdk diff`        compare deployed stack with current state
  * `cdk synth`       emits the synthesized CloudFormation template
 
-Before deploying package up Javascript code using zip -fr code.zip lambda
+# Configuration
 
-Configuration - 
-
-Parameters for Gigya API_KEY, client id and client secret are now part of the CDK stack using Cdk.Parameter constructs
+Environment context variables are in cdk.json
