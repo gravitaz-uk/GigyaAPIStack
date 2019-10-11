@@ -11,43 +11,56 @@
     Config parameters are currently stored in SSM and accessed within lambda. An alternative is to handle these within CDK.
  */
 
-const 
+const
     crypto = require('crypto'),
     middy = require('middy'),
     stringify = require('json-stringify-safe'),
     truthy = require('truthy'),
     AWSXRay = require('aws-xray-sdk'),
     unirest = require('unirest'),
-    jwt_decode = require('jwt-decode'),
     pkce = require('./pkce'),
     httpHeaderDefaults = require('./middleware/httpHeaderDefaults'),
     stringifyJsonResponse = require('./middleware/stringifyJsonResponse'),
     logTrace = require('./middleware/logTrace'),
     jwt = require('jsonwebtoken'),
     jwks = require('jwks-rsa'),
-    {httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse} = require('middy/middlewares');
+    { httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } = require('middy/middlewares');
 
 AWSXRay.captureHTTPsGlobal(require('http'));
 pkce.setTableName(process.env.VERIFIER_TABLE_NAME);
+let jwksClients = {};
 
-var log = function() {if (truthy(process.env.DEBUG)) { console.log(...arguments) }};
+var log = function () { if (truthy(process.env.DEBUG)) { console.log(...arguments) } };
 
 let private = {
-    sign : async function(event, context) {
-        const hash = crypto.createHmac(PROCESS.env.GIGYA_SIGNATURE_ALGORITHM, Buffer.from(process.env.GIGYA_PARTNER_SECRET||"TIM", 'base64'));
-        const consent_str = stringify(event.body.consent?event.body.consent:'default');
+    findJwksClient: (issuer) => {
+        let jwksClient = jwksClients[issuer];
+        if (!jwksClient) {
+            let jwksUri = issuer + '/.well-known/jwks.json';
+            jwksClient = jwks({ 
+                jwksUri: jwksUri, 
+                cache: true,
+                rateLimit: true    
+            });
+            jwksClients[issuer]=jwksClient;    
+        };
+        return jwksClient
+    },
+    sign: async function (event, context) {
+        const hash = crypto.createHmac(PROCESS.env.GIGYA_SIGNATURE_ALGORITHM, Buffer.from(process.env.GIGYA_PARTNER_SECRET || "TIM", 'base64'));
+        const consent_str = stringify(event.body.consent ? event.body.consent : 'default');
         const sig = hash.update(stringify(consent_str)).digest('base64').replace(/=$/g, '').replace(/\//g, '_').replace(/[+]/g, '-');
         return {
             statusCode: 200,
             body: sig
         };
     },
-    showConfig : async (event, context) => {
+    showConfig: async (event, context) => {
         return {
             statusCode: 200,
             headers: { 'content-type': "application/json", pragma: 'nocache' },
             body: {
-                "API_KEY": process.env.GIGYA_API_KEY, 
+                "API_KEY": process.env.GIGYA_API_KEY,
                 "CLIENT_ID": process.env.GIGYA_CLIENT_ID
             }
         };
@@ -55,20 +68,20 @@ let private = {
     redirectToGigya: async (event, context) => {
         if (event.queryStringParameters.code_challenge) {
             await pkce.saveCodeRequest(event.queryStringParameters)
-        }    
-        const queryParams = event.queryStringParameters ? 
-            '?' + Object.keys(event.queryStringParameters).map(i=>`${i}=${event.queryStringParameters[i]}`).join('&') : "";
+        }
+        const queryParams = event.queryStringParameters ?
+            '?' + Object.keys(event.queryStringParameters).map(i => `${i}=${event.queryStringParameters[i]}`).join('&') : "";
         const gigyaAuthorize = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.GIGYA_API_KEY}/authorize${queryParams}`;
-        log ('Redirecting to ', stringify(gigyaAuthorize));
+        log('Redirecting to ', stringify(gigyaAuthorize));
         return {
             statusCode: 302,
-            headers: { 'location': gigyaAuthorize}
+            headers: { 'location': gigyaAuthorize }
         }
     },
     forwardToGigya: async (event, context, endpoint = '/token') => {
         let uri = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.GIGYA_API_KEY}${endpoint}`;
         delete event.headers.Host;
-        if (endpoint == '/token' && event && event.body && event.body.response_type=='code') {
+        if (endpoint == '/token' && event && event.body && event.body.response_type == 'code') {
             let verified = await pkce.verifyCodeChallenge(event.body);
             if (!verified) {
                 log('PKCE check failed');
@@ -81,45 +94,45 @@ let private = {
             }
             log('PKCE check OK');
         }
-        let response = await unirest (
-            event.httpMethod || 'POST', 
+        let response = await unirest(
+            event.httpMethod || 'POST',
             uri,
             event.headers,
             event.body);
-        if (truthy(process.env.EMBED_STATUS_CODE) && response.body && response.statusCode!=200 ) {
+        if (truthy(process.env.EMBED_STATUS_CODE) && response.body && response.statusCode != 200) {
             response.body.proxyStatusCode = response.statusCode;
             response.statusCode = 200
         }
-        return { 
-            statusCode: response.statusCode, 
-            body: response.body 
+        return {
+            statusCode: response.statusCode,
+            body: response.body
         };
     },
-    jwtdecode    : async (event, context) => {
-        let decoded, status;
+    jwtdecode: async (event, context) => {
+        let decoded, status, verified = false;
         let token = (handler.event.body && handler.event.body.token) || handler.event.queryStringParameters.token;
         try {
             status = 200;
-            decoded = jwt.decode(token, {complete: true});
+            decoded = jwt.decode(token, { complete: true });
             log('jwtdecode', decoded);
             let verify = handler.event.queryStringParameters && truthy(handler.event.queryStringParameters.verify);
             log('jwtdecode', verify, handler.event.queryStringParameters);
 
             if (verify) {
-                let jwksUri = decoded.payload.iss + '/.well-known/jwks.json';
-                log('jwtdecode - verifying token', jwksUri);
-                let client = jwks({
-                    jwksUri: jwksUri
-                });
+                let jwksClient = findJwksClient(decoded.payload.iss);
                 let getKey = (header, callback) => {
-                    client.getSigningKey(header.kid, (err, key) => {
-                      log('jwtdecode key ', key);
-                      if (key) {
-                        var signingKey = key.publicKey || key.rsaPublicKey;
-                        callback(null, signingKey);
-                      } else {
-                          callback("No key returned");
-                      }
+                    jwksClient.getSigningKey(header.kid, (err, key) => {
+                        if (key) {
+                            log('jwtdecode key ', key);
+                            var signingKey = key.publicKey || key.rsaPublicKey;
+                            if (signingKey) {
+                                callback(null, signingKey);
+                            } else {
+                                callback(err, "No public key for KID");
+                            }
+                        } else {
+                            callback(err, "No public key for KID");
+                        }
                     });
                 };
                 const psVerify = (token) => {
@@ -131,7 +144,7 @@ let private = {
                     });
                 };
                 decoded = await psVerify(token);
-                decoded = {verified: 'true', ...decoded};
+                verified = true;
                 log('jwtdecode verified', decoded);
             }
         } catch (e) {
@@ -140,33 +153,33 @@ let private = {
         }
         return {
             statusCode: status,
-            headers: { 'content-type': "application/json", pragma: 'nocache' },
+            headers: { 'content-type': "application/json", pragma: 'nocache', 'X-JWT-Verified': verified },
             body: decoded
-        }    
+        }
     },
-    awsAssertion : async (event, context) => {
+    awsAssertion: async (event, context) => {
         let id_token = handler.event.body.id_token;
-        
+
     }
 }
 
 const eventHandler = async (event, context) => {
     switch (event.path) {
-        case '/sign':       return private.sign(event, context);
+        case '/sign': return private.sign(event, context);
         case '/showConfig': return private.showConfig(event, context);
-        case '/decode':     return private.jwtdecode(event, context);
-        case '/authorize':  return private.redirectToGigya(event, context);
+        case '/decode': return private.jwtdecode(event, context);
+        case '/authorize': return private.redirectToGigya(event, context);
         case '/token':
         case '/userinfo':
-        case '/refresh':    return private.forwardToGigya(event, context, event.path); 
-        default:            return {
+        case '/refresh': return private.forwardToGigya(event, context, event.path);
+        default: return {
             statusCode: 404,
-            body: {"err": `unknown endpoint ${event.path}`}
-        }; 
+            body: { "err": `unknown endpoint ${event.path}` }
+        };
     }
 }
 
-const defaultHeaders = {Authorization: `Basic ${Buffer.from(process.env.GIGYA_CLIENT_ID + ":" + process.env.GIGYA_CLIENT_SECRET).toString('base64')}`};
+const defaultHeaders = { Authorization: `Basic ${Buffer.from(process.env.GIGYA_CLIENT_ID + ":" + process.env.GIGYA_CLIENT_SECRET).toString('base64')}` };
 
 let handler = middy(eventHandler)
     .use(httpHeaderNormalizer())
