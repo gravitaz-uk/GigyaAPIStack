@@ -6,7 +6,7 @@ module.exports = () => {
             try {
                 handler.response.body = stringify(handler.response.body);
             } catch (e) {
-                // fail silently
+                console.log('stringifyJsonResponse error', e);
             }
             next();
         }

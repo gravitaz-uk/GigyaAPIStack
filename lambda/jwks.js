@@ -25,7 +25,7 @@ const fns = {
         let verified = false,
             response = {};
         try {
-            response.status = 200;
+            response.statusCode = 200;
             response.body = jwt.decode(token, { complete: true });
 
             if (verify) {
@@ -56,11 +56,11 @@ const fns = {
                 verified = true;
             }
         } catch (e) {
-            response.status = 500;
+            response.statusCode = 500;
             log('jwks.jwtdecode - error', e);
             response.decoded = e;
         }
-        //response.headers = { 'content-type': "application/json", pragma: 'nocache', 'X-JWT-Verified': verified };
+        response.headers = { 'content-type': "application/json", pragma: 'nocache', 'X-JWT-Verified': verified };
         return response;
     }
 };
