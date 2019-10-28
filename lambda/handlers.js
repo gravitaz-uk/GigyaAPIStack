@@ -23,6 +23,7 @@ const
     stringifyJsonResponse   = require('./middleware/stringifyJsonResponse'),
     logTrace                = require('./middleware/logTrace'),
     awsXRay                 = require('./middleware/awsXRay'),
+    { Router }              = require('./router'),
     { httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } 
                             = require('middy/middlewares');
 
@@ -50,7 +51,7 @@ let handlers = {
         };
     },
     redirectToGigya: async (event, context) => {
-        if (event.queryStringParameters.code_challenge) {
+        if (event.queryStringParameters && event.queryStringParameters.code_challenge) {
             await pkce.saveCodeRequest(event.queryStringParameters)
         }
         const queryParams = event.queryStringParameters ?
@@ -62,7 +63,8 @@ let handlers = {
             headers: { 'location': gigyaAuthorize }
         }
     },
-    forwardToGigya: async (event, context, endpoint = '/token') => {
+    forwardToGigya: async (event, context) => {
+        let endpoint = event.path == '/userinfo' ? '/userinfo': '/token';
         let uri = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.GIGYA_API_KEY}${endpoint}`;
         delete event.headers.Host;
         if (endpoint == '/token' && event && event.body && event.body.response_type == 'code') {
@@ -104,20 +106,19 @@ let handlers = {
     }
 }
 
+// create router and set the default handler
+const router = new Router(handlers.forwardToGigya);
+
+router
+    .post('/token')
+    .post('/userinfo')
+    .get('/authorize',    handlers.redirectToGigya)
+    .post('/sign',        handlers.sign)
+    .get('/showConfig',   handlers.showConfig)
+    .post('/decode',      handlers.jwtdecode)
+
 const eventHandler = async (event, context) => {
-    switch (event.path) {
-        case '/sign'        : return handlers.sign(event, context);
-        case '/showConfig'  : return handlers.showConfig(event, context);
-        case '/decode'      : return handlers.jwtdecode(event, context);
-        case '/authorize'   : return handlers.redirectToGigya(event, context);
-        case '/token'       :
-        case '/userinfo'    :
-        case '/refresh'     : return handlers.forwardToGigya(event, context, event.path);
-        default: return {
-            statusCode: 404,
-            body: { "err": `unknown endpoint ${event.path}` }
-        };
-    }
+    return router.handle(event, context);
 }
 
 const defaultHeaders = { Authorization: `Basic ${Buffer.from(process.env.GIGYA_CLIENT_ID + ":" + process.env.GIGYA_CLIENT_SECRET).toString('base64')}` };

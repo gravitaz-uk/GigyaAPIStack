@@ -39,11 +39,7 @@ export class CdkGigyaHelperStack extends cdk.Stack {
         "logs:CreateLogStream",
         "logs:PutLogEvents",
         "xray:PutTraceSegments",
-        "xray:PutTelemetryRecords",
-        "dynamodb:DescribeStream",
-        "dynamodb:GetRecords",
-        "dynamodb:GetShardIterator",
-        "dynamodb:ListStreams",
+        "xray:PutTelemetryRecords"
       ]
     }));
 
@@ -69,12 +65,12 @@ export class CdkGigyaHelperStack extends cdk.Stack {
     
     const proxy = new lambda.Function(this, 'ProxyHandler', {
       functionName: 'GigyaProxyHandler',
-      runtime: lambda.Runtime.NODEJS_10_X,
-      code: lambda.Code.fromAsset('lambda'),
-      handler: 'lambda/handlers.proxyHandler',
-      role: lambdaExecutionRole,
-      timeout: Duration.seconds(12),
-      description: 'Proxy function for Gigya OIDC endpoints',
+      runtime:      lambda.Runtime.NODEJS_10_X,
+      code:         lambda.Code.fromAsset('lambda'),
+      handler:      'lambda/handlers.proxyHandler',
+      role:         lambdaExecutionRole,
+      timeout:      Duration.seconds(12),
+      description:  'Proxy function for Gigya OIDC endpoints',
       environment: {
         'EMBED_STATUS_CODE'         : EMBED_STATUS_CODE, // do not relay actual Gigya status codes as this will prevent actual error from reaching client
         'VERIFIER_TABLE_NAME'       : VERIFIER_TABLE_NAME, // where we will store code verifiers between authorize and token calls
@@ -95,10 +91,10 @@ export class CdkGigyaHelperStack extends cdk.Stack {
     
     // define API endpoint
     const api = new apigw.LambdaRestApi(this, 'ProxyEndpoint', {
-      restApiName: API_ENDPOINT_NAME,
-      endpointTypes: [ EndpointType.REGIONAL ],
-      handler: proxy,
-      description: 'Provides a proxy layer on top of Gigya endpoints to support OIDC',
+      restApiName:    API_ENDPOINT_NAME,
+      endpointTypes:  [ EndpointType.REGIONAL ],
+      handler:        proxy,
+      description:    'Provides a proxy layer on top of Gigya endpoints to support OIDC',
       domainName: {
         certificate: domainCertificate,
         domainName: DOMAIN_NAME
@@ -107,6 +103,7 @@ export class CdkGigyaHelperStack extends cdk.Stack {
 
     const dn = api.domainName;
 
+    // print out endpoint info after deployment
     if (dn) {
       new CfnOutput(this, 'CertifiedProxyEndpointAlias', {
         value: dn.domainName + ' -> ' + dn.domainNameAliasDomainName + ' -> ' + api.url

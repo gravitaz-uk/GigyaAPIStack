@@ -3,25 +3,26 @@ const
     jwt    = require('jsonwebtoken'),
     jwks   = require('jwks-rsa');
 
-let jwksClients = {}; // TODO refactor to use a proper managed cache
+let jwksClients = {}; // TODO refactor to use a proper managed cache, probably
 
 var log = function () { if (truthy(process.env.DEBUG)) { console.log(...arguments) } };
 
-const fns = {
-    findJwksClient: (issuer) => {
-        let jwksClient = jwksClients[issuer];
-        if (!jwksClient) {
-            let jwksUri = issuer + '/.well-known/jwks.json';
-            jwksClient = jwks({ 
-                jwksUri: jwksUri, 
-                cache: true,
-                rateLimit: true    
-            });
-            jwksClients[issuer]=jwksClient;    
-        };
-        return jwksClient
-    },
-    jwtdecode: async (token, verify) => {
+const findJwksClient = function (issuer) {
+    let jwksClient = jwksClients[issuer];
+    if (!jwksClient) {
+        let jwksUri = issuer + '/.well-known/jwks.json';
+        jwksClient = jwks({ 
+            jwksUri: jwksUri, 
+            cache: true,
+            rateLimit: true    
+        });
+        jwksClients[issuer]=jwksClient;    
+    };
+    return jwksClient
+};
+
+module.exports = {
+    jwtdecode: async function (token, verify) {
         let verified = false,
             response = {};
         try {
@@ -29,7 +30,7 @@ const fns = {
             response.body = jwt.decode(token, { complete: true });
 
             if (verify) {
-                let jwksClient = fns.findJwksClient(response.body.payload.iss);
+                let jwksClient = findJwksClient(response.body.payload.iss);
                 let getKey = (header, callback) => {
                     jwksClient.getSigningKey(header.kid, (err, key) => {
                         if (key) {
@@ -64,4 +65,3 @@ const fns = {
         return response;
     }
 };
-module.exports=fns;
