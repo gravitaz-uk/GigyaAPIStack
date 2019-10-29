@@ -1,5 +1,5 @@
-// lightweight request router
-
+const METHODS = {ANY: 'ANY', POST: 'POST', GET: 'GET', PUT: 'PUT', DELETE: 'DELETE', UPDATE: 'UPDATE', PATCH: 'PATCH'}
+// lightweight request router for lambda
 class Route {
     constructor(method, path, handler) {
         this.method = method;
@@ -10,12 +10,17 @@ class Route {
         handler(event, context);
     }
     resolve(event, context) {
-        return ((event.httpMethod==this.method || this.method=='ANY') && event.path==this.path);
+        return ((event.httpMethod==this.method || this.method==METHODS.ANY) && event.path==this.path);
     }
 }
+
+// where multiple paths map to same handler you can skip the handler as it will default to the last one specified
 class Router {
     constructor(initialHandler) {
         this.lastHandler = initialHandler;
+        this.reset();
+    }
+    reset() {
         this.routes=[];
     }
     add(route) {
@@ -31,14 +36,26 @@ class Router {
         }
         return this;
     }
-    use(method, path, handler) {
+    use(path, handler, method = METHODS.ANY) {
         return this.add(new Route(method, path, handler));
     }
     post(path, handler) {
-        return this.use('POST', path, handler);
+        return this.use(path, handler, METHODS.POST);
     }
     get (path, handler) {
-        return this.use('GET', path, handler);
+        return this.use(path, handler, METHODS.GET);
+    }
+    put (path, handler) {
+        return this.use(path, handler, METHODS.PUT);
+    }
+    delete (path, handler) {
+        return this.use(path, handler, METHODS.DELETE);
+    }
+    update (path, handler) {
+        return this.use(path, handler, METHODS.UPDATE);
+    }
+    patch (path, handler) {
+        return this.use(path, handler, METHODS.PATCH);
     }
     find(event, context) {
         return this.routes.find(r=>r.resolve(event, context))

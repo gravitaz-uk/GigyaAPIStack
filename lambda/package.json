@@ -16,7 +16,6 @@
     "jsonwebtoken": "^8.5.1",
     "jwks-rsa": "^1.6.0",
     "jwt-decode": "^2.2.0",
-    "lambda-router": "^2.9.1",
     "middy": "^0.29.0",
     "truthy": "0.0.1",
     "unirest": "^0.6.0"

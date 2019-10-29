@@ -111,10 +111,10 @@ const router = new Router(handlers.forwardToGigya);
 
 router
     .post('/token')
-    .post('/userinfo')
+    .get('/userinfo')
     .get('/authorize',    handlers.redirectToGigya)
     .post('/sign',        handlers.sign)
-    .get('/showConfig',   handlers.showConfig)
+    .use('/showConfig',   handlers.showConfig)
     .post('/decode',      handlers.jwtdecode)
 
 const eventHandler = async (event, context) => {
