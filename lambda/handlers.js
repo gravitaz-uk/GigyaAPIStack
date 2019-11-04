@@ -18,10 +18,16 @@ const
     logTrace                = require('./middleware/logTrace'),
     awsXRay                 = require('./middleware/awsXRay'),
     { Router }              = require('./router'),
-    { httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } 
+    { ssm, httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } 
                             = require('middy/middlewares'),
     { log, forwardToGigya, redirectToGigya, sign, showConfig, jwtdecode, awsAssertion }
-                            = require('./endpoints');
+                            = require('./endpoints'),
+    SSM_CONFIG = {
+        cache: true,
+        paths: {
+            GIGYA: process.env.SSM_PREFIX || '/dev/gigyapoc'
+        }
+    };
 
 // create router and set the default handler
 const router = new Router(forwardToGigya);
@@ -42,6 +48,7 @@ const eventHandler = async (event, context) => {
 const defaultHeaders = { Authorization: `Basic ${Buffer.from(process.env.GIGYA_CLIENT_ID + ":" + process.env.GIGYA_CLIENT_SECRET).toString('base64')}` };
 
 let handler = middy(eventHandler)
+    .use(ssm(SSM_CONFIG))
     .use(awsXRay())
     .use(httpHeaderNormalizer())
     .use(httpHeaderDefaults(defaultHeaders))

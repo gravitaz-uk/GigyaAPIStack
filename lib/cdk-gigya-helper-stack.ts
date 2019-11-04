@@ -16,15 +16,13 @@ export class CdkGigyaHelperStack extends cdk.Stack {
       DOMAIN_NAME               = this.node.tryGetContext('API_DOMAIN_NAME'),
       CERTIFICATE_URN           = this.node.tryGetContext('CERT_URN'),
       API_ENDPOINT_NAME         = this.node.tryGetContext('API_ENDPOINT_NAME') || "GigyaProxyEndpoint",
-      GIGYA_API_KEY             = this.node.tryGetContext('GIGYA_API_KEY'),
-      GIGYA_CLIENT_ID           = this.node.tryGetContext('GIGYA_CLIENT_ID'),
-      GIGYA_CLIENT_SECRET       = this.node.tryGetContext('GIGYA_CLIENT_SECRET'),
+      SSM_PREFIX                = this.node.tryGetContext('SSM_PREFIX') || "/dev/gigyapoc",
       GIGYA_SIGNATURE_ALGORITHM = this.node.tryGetContext('GIGYA_SIGNATURE_ALGORITHM') || "sha1",
       EMBED_STATUS_CODE         = this.node.tryGetContext('EMBED_STATUS_CODE') || "true",
       DEBUG                     = this.node.tryGetContext('DEBUG') || "true",
       VERIFIER_TABLE_NAME       = this.node.tryGetContext('VERIFIER_TABLE_NAME') || "PKCE_VERIFIER";
-    
-      // create a bespoke role for our stack for lambda execution
+
+    // create a bespoke role for our stack for lambda execution
     const lambdaExecutionRole = new Role(this, 'GigyaLambdaExecutionRole', {
       roleName: 'GigyaLambdaExecutionRole',
       assumedBy: new ServicePrincipal('lambda.amazonaws.com')
@@ -35,6 +33,8 @@ export class CdkGigyaHelperStack extends cdk.Stack {
       effect: Effect.ALLOW,
       resources: ['*'],
       actions: [
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath",
         "logs:CreateLogGroup",
         "logs:CreateLogStream",
         "logs:PutLogEvents",
@@ -72,11 +72,9 @@ export class CdkGigyaHelperStack extends cdk.Stack {
       timeout:      Duration.seconds(12),
       description:  'Proxy function for Gigya OIDC endpoints',
       environment: {
-        'EMBED_STATUS_CODE'         : EMBED_STATUS_CODE, // do not relay actual Gigya status codes as this will prevent actual error from reaching client
+        'EMBED_STATUS_CODE'         : EMBED_STATUS_CODE,   // do not relay actual Gigya status codes as this will prevent actual error from reaching client
         'VERIFIER_TABLE_NAME'       : VERIFIER_TABLE_NAME, // where we will store code verifiers between authorize and token calls
-        'GIGYA_API_KEY'             : GIGYA_API_KEY,
-        'GIGYA_CLIENT_ID'           : GIGYA_CLIENT_ID,
-        'GIGYA_CLIENT_SECRET'       : GIGYA_CLIENT_SECRET,
+        'SSM_PREFIX'                : SSM_PREFIX,
         'GIGYA_SIGNATURE_ALGORITHM' : GIGYA_SIGNATURE_ALGORITHM,
         'DEBUG'                     : DEBUG
       }

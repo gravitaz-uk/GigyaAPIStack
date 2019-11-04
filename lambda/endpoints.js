@@ -9,8 +9,12 @@ const
 
 pkce.setTableName(process.env.VERIFIER_TABLE_NAME);
 
-module.exports = {
-    log : function () { if (truthy(process.env.DEBUG)) { console.log(...arguments) } },
+endpoints = {
+    log : function () { 
+        if (truthy(process.env.DEBUG)) { 
+            console.log(...arguments) 
+        } 
+    },
     sign: async function (event, context) {
         const hash = crypto.createHmac(PROCESS.env.GIGYA_SIGNATURE_ALGORITHM, Buffer.from(process.env.GIGYA_PARTNER_SECRET || "TIM", 'base64'));
         const consent_str = stringify(event.body.consent ? event.body.consent : 'default');
@@ -37,7 +41,7 @@ module.exports = {
         const queryParams = event.queryStringParameters ?
             '?' + Object.keys(event.queryStringParameters).map(i => `${i}=${event.queryStringParameters[i]}`).join('&') : "";
         const gigyaAuthorize = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.GIGYA_API_KEY}/authorize${queryParams}`;
-        this.log('Redirecting to ', stringify(gigyaAuthorize));
+        endpoints.log('Redirecting to ', stringify(gigyaAuthorize));
         return {
             statusCode: 302,
             headers: { 'location': gigyaAuthorize }
@@ -50,7 +54,7 @@ module.exports = {
         if (endpoint == '/token' && event && event.body && event.body.response_type == 'code') {
             let verified = await pkce.verifyCodeChallenge(event.body);
             if (!verified) {
-                this.log('PKCE check failed');
+                endpoints.log('PKCE check failed');
                 return {
                     statusCode: 403,
                     body: {
@@ -58,7 +62,7 @@ module.exports = {
                     }
                 }
             }
-            this.log('PKCE check OK');
+            endpoints.log('PKCE check OK');
         }
         let response = await unirest(
             event.httpMethod || 'POST',
@@ -75,13 +79,13 @@ module.exports = {
         };
     },
     jwtdecode: async (event, context) => {
-        let token = (handler.event.body && handler.event.body.token) || handler.event.queryStringParameters.token;
-        let verify = handler.event.queryStringParameters && truthy(handler.event.queryStringParameters.verify);
+        let token = (event.body && event.body.token) || event.queryStringParameters.token;
+        let verify = event.queryStringParameters && truthy(event.queryStringParameters.verify);
 
         return await jwks.jwtdecode(token, verify);
     },
     awsAssertion: async (event, context) => {
-        let token = (handler.event.body && handler.event.body.token) || handler.event.queryStringParameters.token;
+        let token = (event.body && event.body.token) || event.queryStringParameters.token;
 
         AWS.config.region = 'eu-west-2'; // Region
         let cognitoidentity = new AWS.CognitoIdentity();
@@ -91,7 +95,7 @@ module.exports = {
                 'oauth.gravitaz.co.uk': token
             }
         }).promise();
-        this.log(stringify(id));
+        endpoints.log(stringify(id));
         let creds = await cognitoidentity.getCredentialsForIdentity({
             ...id,
             Logins: {
@@ -104,3 +108,4 @@ module.exports = {
         }
     }
 }
+module.exports = endpoints
