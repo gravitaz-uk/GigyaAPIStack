@@ -12,110 +12,28 @@
  */
 
 const
-    crypto                  = require('crypto'),
     middy                   = require('middy'),
-    stringify               = require('json-stringify-safe'),
-    truthy                  = require('truthy'),
-    unirest                 = require('unirest'),
-    pkce                    = require('./pkce'),
-    jwks                    = require('./jwks'),
     httpHeaderDefaults      = require('./middleware/httpHeaderDefaults'),
     stringifyJsonResponse   = require('./middleware/stringifyJsonResponse'),
     logTrace                = require('./middleware/logTrace'),
     awsXRay                 = require('./middleware/awsXRay'),
     { Router }              = require('./router'),
     { httpHeaderNormalizer, jsonBodyParser, httpErrorHandler, urlEncodeBodyParser, httpPartialResponse } 
-                            = require('middy/middlewares');
-
-pkce.setTableName(process.env.VERIFIER_TABLE_NAME);
-var log = function () { if (truthy(process.env.DEBUG)) { console.log(...arguments) } };
-
-let handlers = {
-    sign: async function (event, context) {
-        const hash = crypto.createHmac(PROCESS.env.GIGYA_SIGNATURE_ALGORITHM, Buffer.from(process.env.GIGYA_PARTNER_SECRET || "TIM", 'base64'));
-        const consent_str = stringify(event.body.consent ? event.body.consent : 'default');
-        const sig = hash.update(stringify(consent_str)).digest('base64').replace(/=$/g, '').replace(/\//g, '_').replace(/[+]/g, '-');
-        return {
-            statusCode: 200,
-            body: sig
-        };
-    },
-    showConfig: async (event, context) => {
-        return {
-            statusCode: 200,
-            headers: { 'content-type': "application/json", pragma: 'nocache' },
-            body: {
-                "API_KEY": process.env.GIGYA_API_KEY,
-                "CLIENT_ID": process.env.GIGYA_CLIENT_ID
-            }
-        };
-    },
-    redirectToGigya: async (event, context) => {
-        if (event.queryStringParameters && event.queryStringParameters.code_challenge) {
-            await pkce.saveCodeRequest(event.queryStringParameters)
-        }
-        const queryParams = event.queryStringParameters ?
-            '?' + Object.keys(event.queryStringParameters).map(i => `${i}=${event.queryStringParameters[i]}`).join('&') : "";
-        const gigyaAuthorize = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.GIGYA_API_KEY}/authorize${queryParams}`;
-        log('Redirecting to ', stringify(gigyaAuthorize));
-        return {
-            statusCode: 302,
-            headers: { 'location': gigyaAuthorize }
-        }
-    },
-    forwardToGigya: async (event, context) => {
-        let endpoint = event.path == '/userinfo' ? '/userinfo': '/token';
-        let uri = `https://fidm.eu1.gigya.com/oidc/op/v1.0/${process.env.GIGYA_API_KEY}${endpoint}`;
-        delete event.headers.Host;
-        if (endpoint == '/token' && event && event.body && event.body.response_type == 'code') {
-            let verified = await pkce.verifyCodeChallenge(event.body);
-            if (!verified) {
-                log('PKCE check failed');
-                return {
-                    statusCode: 403,
-                    body: {
-                        errMsg: 'PKCE verification failure'
-                    }
-                }
-            }
-            log('PKCE check OK');
-        }
-        let response = await unirest(
-            event.httpMethod || 'POST',
-            uri,
-            event.headers,
-            event.body);
-        if (truthy(process.env.EMBED_STATUS_CODE) && response.body && response.statusCode != 200) {
-            response.body.proxyStatusCode = response.statusCode;
-            response.statusCode = 200
-        }
-        return {
-            statusCode: response.statusCode,
-            body: response.body
-        };
-    },
-    jwtdecode: async (event, context) => {
-        let token = (handler.event.body && handler.event.body.token) || handler.event.queryStringParameters.token;
-        let verify = handler.event.queryStringParameters && truthy(handler.event.queryStringParameters.verify);
-
-        return await jwks.jwtdecode(token, verify);
-    },
-    awsAssertion: async (event, context) => {
-        let id_token = handler.event.body.id_token;
-
-    }
-}
+                            = require('middy/middlewares'),
+    { log, forwardToGigya, redirectToGigya, sign, showConfig, jwtdecode, awsAssertion }
+                            = require('./endpoints');
 
 // create router and set the default handler
-const router = new Router(handlers.forwardToGigya);
+const router = new Router(forwardToGigya);
 
 router
     .post('/token')
-    .get('/userinfo')
-    .get('/authorize',    handlers.redirectToGigya)
-    .post('/sign',        handlers.sign)
-    .use('/showConfig',   handlers.showConfig)
-    .post('/decode',      handlers.jwtdecode)
+    .get ('/userinfo')
+    .get ('/authorize',   redirectToGigya)
+    .post('/sign',        sign)
+    .get ('/config',      showConfig)
+    .post('/decode',      jwtdecode)
+    .post('/assertAWS',   awsAssertion);
 
 const eventHandler = async (event, context) => {
     return router.handle(event, context);
