@@ -2,6 +2,7 @@ const
     crypto                  = require('crypto'),
     stringify               = require('json-stringify-safe'),
     truthy                  = require('truthy'),
+    falsey                  = require('falsey'),
     unirest                 = require('unirest'),
     pkce                    = require('./pkce'),
     jwks                    = require('./jwks'),
@@ -80,12 +81,13 @@ endpoints = {
     },
     jwtdecode: async (event, context) => {
         let token = (event.body && event.body.token) || event.queryStringParameters.token;
-        let verify = event.queryStringParameters && truthy(event.queryStringParameters.verify);
+        let noverify = (event.queryStringParameters && falsey(event.queryStringParameters.verify));
 
-        return await jwks.jwtdecode(token, verify);
+        return await jwks.jwtdecode(token, !noverify);
     },
     awsAssertion: async (event, context) => {
         let token = (event.body && event.body.token) || event.queryStringParameters.token;
+        endpoints.log(stringify({method: 'awsAssertion', ...context}));
 
         AWS.config.region = 'eu-west-2'; // Region
         let cognitoidentity = new AWS.CognitoIdentity();
