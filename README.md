@@ -10,7 +10,7 @@ Provides an proxy layer between OIDC RP and Gigya endpoints. Features:
 
 ## Implementation
 Implemented using [AWS CDK](https://docs.aws.amazon.com/cdk/) 
-Details [here](https://confluence.nap/pages/viewpage.action?pageId=288113277)
+Details [here](design.pdf)
 
 # Useful commands
  * `npm run build`   compile typescript to js
