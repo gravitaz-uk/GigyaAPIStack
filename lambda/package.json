@@ -9,7 +9,7 @@
   "author": "Tim Holmes",
   "license": "ISC",
   "dependencies": {
-    "aws-sdk": "^2.562.0",
+    "aws-sdk": "^2.814.0",
     "aws-xray-sdk": "^2.4.0",
     "base64url": "^3.0.1",
     "falsey": "^1.0.0",
