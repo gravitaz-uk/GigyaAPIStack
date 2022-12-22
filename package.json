@@ -24,6 +24,6 @@
     "@aws-cdk/core": "^1.15.0",
     "@aws-cdk/cx-api": "^1.15.0",
     "@aws-cdk/region-info": "^1.15.0",
-    "jsonwebtoken": "^8.5.1"
+    "jsonwebtoken": "^9.0.0"
   }
 }
